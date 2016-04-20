@@ -115,33 +115,23 @@ class LindenmayerTree:
         return productions
     # fed parse_productions
 
-    def variable(self, data, n):
-        #angles = []
-        angle = data['angle']
-        position = data['position']
-        var = data['production_symbol']
-        if ((n > 0) and (var in self.productions)):
-            for p in self.productions[var]:
+    def variable(self, angle, position, symbol, n):
+        if ((n >= 0) and (symbol in self.productions)):
+            for p in self.productions[symbol]:
                 if (p == '-') or (p == '+'):
                     if (p == '-'):
                         angle -= self.rotAngle
                     if (p == '+'):
                         angle += self.rotAngle
+                    angle %= 360
                     node = LindenmayerNode(position, angle)
                     self.nodes.append(node)
-                    #angle = node['angle'] Unnoetig?
                     position = node.getNextPosition()
-                    #positions.append(node)
                 else: # variable
-                    result = self.variable({'angle':angle,'position':position,'production_symbol':p}, n-1)
-                    if 'nothing' not in result:
-                        angle = result[-1].getAngle()
-                        position = result[-1].getNextPosition()
-                        self.nodes.extend(result)
-            # for p in productions[var]
-        else:
-            return {'nothing' : 0}
-        return self.nodes # anders loesen! TODO
+                    self.variable(angle, position, p, n-1)
+                    if len(self.nodes) > 0:
+                        angle = self.nodes[-1].getAngle()
+                        position = self.nodes[-1].getNextPosition()
     ### fed variable
 
     def get_print_function(self, c):
@@ -155,28 +145,7 @@ class LindenmayerTree:
     #fed get_print_function
 
     def calcTree(self):
-        #positions = []
-        #position = (start_point[0] - (start_metrics[0] / 2), start_point[1] - start_metrics[1])
-        position = self.position
-        angle = self.angle
-        for p in self.productions['w']:
-
-            if (p == '-') or (p == '+'):
-                if (p == '-'):
-                    angle -= self.rotAngle
-                if (p == '+'):
-                    angle += self.rotAngle
-                node = LindenmayerNode(position, angle)
-                self.nodes.append(node)
-                #angle = node['angle'] Unnoetig?
-                position = node.getNextPosition()
-                #positions.append(node)
-            else: # variable
-                result = self.variable({'angle':angle,'position':position,'production_symbol':p}, self.recursions)
-                if 'nothing' not in result:
-                    angle = result[-1].getAngle()
-                    position = result[-1].getNextPosition()
-                    self.nodes.extend(result)
+        self.variable(self.angle, self.position, 'w', self.recursions)
     # fed calcTree
 
     def toPolygon(self):
