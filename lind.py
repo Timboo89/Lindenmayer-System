@@ -134,28 +134,25 @@ class LindenmayerTree:
                         position = self.nodes[-1].getNextPosition()
     ### fed variable
 
-    def get_print_function(self, c):
-        functions = {
-            '-' : LindenmayerNode,
-            '+' : LindenmayerNode,
-        }
-        if c in functions:
-            return functions[c]
-        return variable
-    #fed get_print_function
-
     def calcTree(self):
-        self.variable(self.angle, self.position, 'w', self.recursions)
+        self.variable(self.angle, (0,0), 'w', self.recursions)
     # fed calcTree
 
-    def toPolygon(self):
-        start = [(self.position[0] - start_metrics[0] / 2, self.position[1])]
-        end = [(self.position[0] + start_metrics[0] / 2, self.position[1])]
+    def toPolygon(self, position=False, zoom=1):
+        if not position:
+            position = self.position
+        start = [(position[0] - start_metrics[0] / 2, position[1])]
+        end = [(position[0] + start_metrics[0] / 2, position[1])]
         polygon_head = start
         polygon_tail = end
         for p in self.nodes:
-            polygon_head.append(p.tips[0])
-            polygon_tail.append(p.tips[1])
+            c_tips = [[p.tips[0][0],p.tips[0][1]],[p.tips[1][0], p.tips[1][1]]]
+            c_tips[0][0] = c_tips[0][0] * zoom
+            c_tips[0][1] = c_tips[0][1] * zoom
+            c_tips[1][0] = c_tips[1][0] * zoom
+            c_tips[1][1] = c_tips[1][1] * zoom
+            polygon_head.append([c_tips[0][0] + position[0], c_tips[0][1] + position[1]])
+            polygon_tail.append([c_tips[1][0] + position[0], c_tips[1][1] + position[1]])
         polygon_tail.reverse()
         return polygon_head + polygon_tail
 
@@ -187,8 +184,8 @@ colors = [
 ]
 
 screen_metrics = (800, 600)
-start_point = (screen_metrics[0] / 6, screen_metrics[1] / 3)
-start_metrics = (50, 100)
+start_point = [screen_metrics[0] / 6, screen_metrics[1] / 3]
+start_metrics = (2, 3)
 
 rotationAngle = 60
 start_angle = 0
@@ -204,7 +201,7 @@ ltree = LindenmayerTree(
     rotationAngle, 
     args.recursions) #rules, position, angle, rotAngle, recursions
 ltree.calcTree()
-polygon = ltree.toPolygon()
+#polygon = ltree.toPolygon()
 
 
 ### Init Pygame
@@ -217,25 +214,42 @@ clock = pygame.time.Clock()
 
 
 ### the loop
-running = 1
+running = True
 top = 0
+position = start_point
+zoom = 1.0
+recalc = True
 #counter = 1
 while running:
     clock.tick(30)
     screen.fill((0,0,0))
 
-    tree = pygame.draw.polygon(screen, (0,255,0), polygon)
-    tree.move(7,0)
+    if recalc:
+        polygon = ltree.toPolygon(position, zoom)
+        recalc = False
+    pygame.draw.polygon(screen, (0,255,0), polygon)
     pygame.display.update()
 
     for event in pygame.event.get():
         # Spiel beenden, wenn wir ein QUIT-Event finden.
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            running = False  
-        #elif event.type == pygame.KEYDOWN and event.key == pygame.K_PLUS:
-        #    counter += 1            
+        elif event.type == pygame.KEYDOWN: 
+            if event.key == pygame.K_ESCAPE:
+                running = False  
+            if event.key == pygame.K_UP:
+                position[1] = position[1] - 1
+            if event.key == pygame.K_DOWN:
+                position[1] = position[1] + 1
+            if event.key == pygame.K_LEFT:
+                position[0] = position[0] - 1
+            if event.key == pygame.K_RIGHT:
+                position[0] = position[0] + 1
+            if event.key == pygame.K_F1:
+                zoom -= 0.05
+            if event.key == pygame.K_F2:
+                zoom += 0.05
+        recalc = True            
 
 # raw_input("Press Enter to terminate.")
 
