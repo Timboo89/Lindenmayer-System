@@ -1,24 +1,8 @@
-'''
-neues Vorgehen:
-1) Eingabeparameter festlegen
-    - Iterationen (n)
-    - Winkel (a)
-    - (Start-)Axiom
-    - Regeln
-2) n mal Variablen in Axiom ersetzen
-3) Pfad Berechnen
-    - Startwinkeln 180 Grad
-    - bei - +a
-    - bei + -a
-    - bei Variable: Zeichne Strich in Richtung aktuellem Winkel
-    - [] Ast. Bei finden von [ oeffne Ast mit 
+# Simple Lindenmayer System Interpreter
+# author: Timo Schmidt
+# date: 26.04.2016
 
-Weiter:
-- Szene bewegen
-- Fuege Farbcodes hinzu
-- Ersetze Striche durch Rechtecke/Polygone
-'''
-
+# Main Program starts at line 431
 
 import argparse
 import re
@@ -30,18 +14,57 @@ import pygame
 ######################## ARGUMENTS ########################################################
 ###########################################################################################
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-prod", "--productions")
-parser.add_argument("-ax", "--axiom")
-parser.add_argument("-a", "--angle", type=int)
-parser.add_argument("-s", "--startangle", type=int)
-parser.add_argument("-rec", "--recursions", type=int)
-parser.add_argument("-d", "--distance", type=int)
-parser.add_argument("-e", "--example")
+def coords(s):
+    try:
+        x, y= map(int, s.split(','))
+        return [x, y]
+    except:
+        raise argparse.ArgumentTypeError("Coordinates must be x,y")
+
+parser = argparse.ArgumentParser(description='test', formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('--coord', help="Coordinate to start drawing", type=coords)
+parser.add_argument('--metrics', help="Screensize", type=coords)
+
+parser.add_argument("-prod", "--productions", 
+    help="in syntax of {F=F+G,G=--F}\n"
+    "+       - turn anti-clockwise\n"
+    "-       - turn clockwise\n"
+    "{w,d}   - w : width at that part of the L-System\n"
+    "        - d : length of each branch at that part of the L-System\n"
+    "(r,g,b) - colorcode, to encolor that part of the L-System\n"
+    "[...]   - [ : open a new branch\n"
+    "        - ] : close the current branch\n"
+    )
+parser.add_argument("-ax", "--axiom", help="in syntax of F--G+F (see productions)")
+parser.add_argument("-a", "--angle", type=int, help="angle each +anti-clockwise -clockwise turn, the tree takes")
+parser.add_argument("-s", "--startangle", type=int, help="angle to start tree")
+parser.add_argument("-rec", "--recursions", type=int, help="number of recursive replacements of rules in axiom")
+parser.add_argument("-d", "--distance", type=int, help="standard length of a branch (if not given otherwise in production)")
 parser.add_argument("-g", "--growing", action="store_true", help="shows each step of growing tree - doesn't work properly with randomangle")
-parser.add_argument("--shrink", action="store_true")
-parser.add_argument("-w", "--width", type=int, help="added width at the root of tree")
+parser.add_argument("--shrink", action="store_true", help="lets shrink width of each deeper branch")
+parser.add_argument("-w", "--width", type=int, help="added width at the root of tree (if not given otherwise in production)")
 parser.add_argument("-r", "--randomangle", type=int, help="maximum addad angle per iteration - doesn't work properly with growing")
+parser.add_argument("-e", "--example", 
+    help="Pick one of various example L-Systems. \n"
+    "Examples are: \n"
+    "- cross\n"
+    "- Joined Cross Curves\n"
+    "- Lace\n"
+    "- Sierpinski Median Curve\n"
+    "- Space Filling Curve\n"
+    "- Sierpinski Carpet\n"
+    "- Koch Snowflake\n"
+    "- Pleasant Error\n"
+    "- Dragon Curve\n"
+    "- Sierpinski Triangle 1\n"
+    "- Sierpinski Triangle 2\n"
+    "- Koch Curve\n"
+    "- Fractal Plant\n"
+    "- Pond Weed\n"
+    "- Wispy Tree\n"
+    "- Tree (default)\n"
+    "- Highway Dragon"
+    )
 args = parser.parse_args()
 
 # examples
@@ -254,11 +277,19 @@ if args.distance != None:
 if args.width != None:
     settings['width'] = args.width
 else:
-    settings['width'] = 0
+    settings['width'] = 1
 if args.randomangle != None:
     settings['randomangle'] = args.randomangle
 elif 'randomangle' not in settings:
-    settings['randomangle'] = 0.0
+    settings['randomangle'] = 0
+if args.metrics != None:
+    settings['metrics'] = args.metrics
+elif 'metrics' not in settings:
+    settings['metrics'] = [800,600]
+if args.coord != None:
+    settings['start_position'] = args.coord
+elif 'start_position' not in settings:
+    settings['start_position'] = [settings['metrics'][0]/2,settings['metrics'][1]]
 settings['growing'] = args.growing
 settings['shrink'] = args.shrink
 
@@ -266,12 +297,13 @@ settings['shrink'] = args.shrink
 ################################# FUNCTIONS ###############################################
 ###########################################################################################
 
+# calculate the radiant of an angle
 def radAngle(angle):
     return angle * math.pi / 180
 
+# create an array of a string of production rules
 def parse_productions(productions_input):
     # associative array for production rules
-    #regexp = re.compile(ur'(\w=((\([0-9]{1,3},[0-9]{1,3},[0-9]{1,3}\))?[+A-Z-\[\]]*)*)') 
     regexp = re.compile(ur'(\w=((\{[0-9]{1,2}(,[0-9]{1,2})?\})?(\([0-9]{1,3},[0-9]{1,3},[0-9]{1,3}\))?[+A-Z-\[\]]*)*)') 
     productions_input = re.findall(regexp, productions_input)
     productions = {}
@@ -285,8 +317,9 @@ def parse_productions(productions_input):
         p = p.split("=")
         productions[p[0]] = p[1]
     return productions
-# fed parse_productions
+# end def parse_productions
 
+# iterate the given axiom with productions at least once
 def iterate_axiom(axiom, productions, iterations=1):
     result = axiom
     for i in range(0,iterations):
@@ -298,25 +331,42 @@ def iterate_axiom(axiom, productions, iterations=1):
                 result += a
         axiom = result
     return result
+# end def iterate axiom
 
+# surface = surface to draw on
+# word = word to draw
+# offset = where to start drawing
 # s = settings
+# Note: if randomangle is set, each use of draw will create a different tree
 def draw(surface, word, offset, s):
+    # width to start drawing at root
     width = s['width']
+    # number of entered branches (to shrink width of the tree)
     shrinked = 0
+    # stack to store settings before entering a new branch
     bracketstack = []
+    # current position in tree-word
     n = 0
+    # current angle to draw
     angle = s['start_angle']
+    # current position to draw
     position = offset
+    # current length of branch to draw
     distance = s['distance']
+    # standard / current color to draw with
     color = [200,200,200]
+    # go through every step of word
     while n < len(word):
+        # current sign of word
         c = word[n]
+        # just turn the angle
         if   c == '+' or c == '-':
             if c == '+':
                 angle -= s['angle']
             else:
                 angle += s['angle']
             angle %= 360
+        # create new branch
         elif c == '[':
             bracketstack.append({
                 'angle' : angle,
@@ -326,13 +376,14 @@ def draw(surface, word, offset, s):
                 'distance' : distance
                 })
             shrinked += 1
+        # return to point, where branch was created
         elif c == ']':
             pop = bracketstack.pop()
             angle = pop['angle']
             position = pop['position']
             color = pop['color']
             shrinked -= 1
-        #expect color
+        # change color to draw with
         elif c == '(':
             colorcode = word[n+1:]
             endofcolor = colorcode.find(')')
@@ -340,7 +391,7 @@ def draw(surface, word, offset, s):
             color = colorcode.split(',')
             color[0],color[1],color[2] = int(color[0]),int(color[1]),int(color[2])
             n += endofcolor+1
-        # expect {width, length} or {width}
+        # change width and length {width, length} or {width}
         elif c == '{':
             tmp = word[n+1:]
             endofwidth = tmp.find('}')
@@ -350,22 +401,36 @@ def draw(surface, word, offset, s):
                 distance = int(tmp[1])
             width = int(tmp[0])
             n += endofwidth+1
+        # actually draw a branch
         else:
+            # copy old position
             old_position = position[:]
+            # add some randomness to current angle
             angle += int(s['randomangle'] * random.uniform(-1.0,1.0))
+            # radiant of current angle
             rad = radAngle(angle)
+            # calculate new position
             cos_angle = math.cos(rad)
             sin_angle = math.sin(rad)
             position = [old_position[0] - (distance * sin_angle)   # x Koordinate der Rotation ist immer 0
                        ,old_position[1] + (distance * cos_angle)]
+            # get current width to draw with
             cur_width = width
             if s['shrink']:
                 cur_width -= shrinked
+            # draw branch 
             if cur_width > 0:
                 pygame.draw.line(surface, color, old_position, position, cur_width)
             else:
                 pygame.draw.line(surface, color, old_position, position, 1)
         n+=1
+    # end while
+# end def draw
+
+
+###########################################################################################
+############################# MAIN ########################################################
+###########################################################################################
 
 ### Init Pygame
 pygame.init()
@@ -375,15 +440,18 @@ pygame.mouse.set_visible(1)
 pygame.key.set_repeat(1, 30)
 clock = pygame.time.Clock()
 
-
+# create a list of production rules
 parsed_prods = parse_productions(settings['productions'])
+# if growing is active, set start axiom as currently created word
 if settings['growing']:
     word = settings['axiom']
 else:
+    # otherwise calculate the actual word after n iterations
     word = iterate_axiom(
             settings['axiom'], 
             parsed_prods, 
             settings['recursions'])
+    # draw word as a tree on screen only once
     screen.fill((0,0,0))
     draw(screen, word, settings['start_position'], settings)
     pygame.display.update()
@@ -391,16 +459,19 @@ else:
 ### the loop
 running = True
 grown = 0
-#counter = 1
+# run program as long as the user didn't press ESC
 while running:
     clock.tick(1)
 
-    #eigentlich hier zeichnen
+    # if the tree is supposed to grow:
     if settings['growing'] and grown <= settings['recursions']:
         screen.fill((0,0,0))
+        # draw current tree
         draw(screen, word, settings['start_position'], settings)
         pygame.display.update()
+        # if maximum growth of tree isn't achieved yet:
         if grown <= settings['recursions']:
+            # calculate next iteration of tree / word
             word = iterate_axiom(word, parsed_prods)
             grown += 1
 
