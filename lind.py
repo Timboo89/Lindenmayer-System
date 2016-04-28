@@ -21,6 +21,13 @@ def coords(s):
     except:
         raise argparse.ArgumentTypeError("Coordinates must be x,y")
 
+def color(s):
+    try:
+        r, g, b = map(int, s.split(','))
+        return [r, g, b]
+    except:
+        raise argparse.ArgumentTypeError("Color must be r,g,b")
+
 parser = argparse.ArgumentParser(description='test', formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('--coord', help="Coordinate to start drawing", type=coords)
 parser.add_argument('--metrics', help="Screensize", type=coords)
@@ -44,6 +51,7 @@ parser.add_argument("-g", "--growing", action="store_true", help="shows each ste
 parser.add_argument("--shrink", action="store_true", help="lets shrink width of each deeper branch")
 parser.add_argument("-w", "--width", type=int, help="added width at the root of tree (if not given otherwise in production)")
 parser.add_argument("-r", "--randomangle", type=int, help="maximum addad angle per iteration - doesn't work properly with growing")
+parser.add_argument("-c", "--backgroundcolor", type=color, help="sets the background color")
 parser.add_argument("-e", "--example", 
     help="Pick one of various example L-Systems. \n"
     "Examples are: \n"
@@ -229,6 +237,16 @@ example = {
         'metrics'        : [800,600],
         'distance'       : 5
     },
+    'My Tree' : {
+        'productions'    : "{F={3,10}(140,80,60)FF-[{3,10}(0,0,255)---F+F+F]+[{2,10}(0,255,255)+++F-F-F]}",
+        'axiom'          : "F",
+        'angle'          : 22,
+        'recursions'     : 5,
+        'start_angle'    : 180,
+        'start_position' : [400,600],
+        'metrics'        : [800,600],
+        'distance'       : 5
+    },
     'Random Tree' : {
         'productions'    : "{F={5,7}(140,80,60)FF-[{3,4}(24,180,24)-F+F+F]+[{2,2}(48,220,48)+F-F-F]}",
         'axiom'          : "F",
@@ -254,6 +272,7 @@ example = {
 
 # Default Values
 settings = example['Tree']
+settings['background_color'] = [0,0,0]
 
 if args.example:
     if args.example in example:
@@ -261,7 +280,8 @@ if args.example:
     else:
         print "Das Beispiel -", args.example, "- existiert nicht!"
         exit()
-
+if args.backgroundcolor:
+    settings['background_color'] = args.backgroundcolor
 if args.productions:
     settings['productions'] = args.productions
 if args.axiom != None:
@@ -452,7 +472,7 @@ else:
             parsed_prods, 
             settings['recursions'])
     # draw word as a tree on screen only once
-    screen.fill((0,0,0))
+    screen.fill(settings['background_color'])
     draw(screen, word, settings['start_position'], settings)
     pygame.display.update()
 
@@ -465,7 +485,7 @@ while running:
 
     # if the tree is supposed to grow:
     if settings['growing'] and grown <= settings['recursions']:
-        screen.fill((0,0,0))
+        screen.fill(settings['background_color'])
         # draw current tree
         draw(screen, word, settings['start_position'], settings)
         pygame.display.update()
